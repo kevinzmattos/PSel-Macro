@@ -1,0 +1,654 @@
+---
+title: "Vacinas Covid19 - Acre"
+author: "Kevin  Mattos"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+# pacotes
+
+library(tidyverse)
+library(ggthemes)
+library(kableExtra)
+library(lubridate)
+library(scales)
+library(xlsx)
+```
+
+# Introdução
+
+Este notebook pretende analisar os dados do DATASUS referente a vacinação de Covid19 no Estado do Acre. Os dados podem ser baixados no seguinte link:
+
+
+https://opendatasus.saude.gov.br/dataset/covid-19-vacinacao/resource/ef3bd0b8-b605-474b-9ae5-c97390c197a8 
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+# coletando os dados
+
+df <- read.csv("C:\\Users\\kevin\\OneDrive\\Documentos\\covid_acre.csv", sep=";", encoding = "UTF-8")
+```
+
+# Análise exploratória
+
+Antes de fazermos os calculos é preciso verificar se a tabela está no formato ideal e se há pontos de conflito.
+
+```{r echo=FALSE, message=FALSE}
+
+## Visao Geral
+
+glimpse(df)
+```
+
+
+
+## Informaçoes cruciais
+
+
+Vamos checar se há missing values na coluna de data de aplicação e quantos indivíduos diferentes tomaram a vacina neste dataset
+
+
+
+
+```{r echo=TRUE}
+## Checando se há Missing values para a data de aplicação
+sum(is.na(df$vacina_dataAplicacao)) %>%
+  kable(col.name= c("NAs"),format="pipe", align = "c")
+```
+
+
+
+
+
+
+```{r echo=TRUE}
+## checando o número de individuos distintos tomaram vacinas
+n_distinct(df$paciente_id) %>%
+  kable(col.name=c("Nº de indivíduos que tomaram vacina"), format="pipe", align = "c")
+
+
+```
+
+
+
+### Summary dos dados
+
+```{r echo=FALSE}
+summary(df)
+```
+
+
+
+
+Nota-se que algumas colunas concentram os NAs: 
+
+i) paciente_endereco_coPais; 
+
+
+ii) paciente_endereco_coIbgeMunicipi; 
+
+
+iii) paciente_endereco_cep; 
+
+
+iv) vacina_categoria_codigo
+
+\ 
+
+Isto está dentro do esperado já que informações sobre o endereço dos pacientes são mais difíceis de obter. Os 'NAs' na coluna de códigos das vacinas, tampouco terá implicações negativas na análise.  Sendo assim, seguimos agora com as colunas de datas, o ojetivo é transformá-las em objetos 'datetime' para que possamos fazer operaçoes relacionadas a datas.
+
+\ 
+
+###  Transformando as colunas com datas para o formato correto 
+
+Isto possbilitará filtrar os dados de acordo com a data e o período desejado.
+
+\ 
+
+
+```{r echo=TRUE}
+
+
+df$vacina_dataAplicacao <- lubridate::ymd_hms(df$vacina_dataAplicacao) %>%
+  strftime( format="%Y-%m-%d") %>% as.Date()
+
+df$data_importacao_rnds <- lubridate::ymd_hms(df$data_importacao_rnds) %>%
+  strftime(format="%Y-%m-%d") %>% as.Date()
+```
+
+
+
+
+
+```{r echo=FALSE}
+# dado mais antigo do dataset
+
+df %>%
+  arrange(vacina_dataAplicacao) %>% #ordem crescente de acordo com a data
+  head(1) %>% # primeira observaçao
+  select(paciente_idade, vacina_dataAplicacao) %>% #selecionar as colunas de interesse para facilitar a visualizaçao
+  kable(col.names= c("Idade do paciente", "Data"),format = "pipe", align = "c", row.names = F)
+
+```
+
+
+
+```{r echo=FALSE}
+# dado mais novo do dataset
+df %>%
+  arrange(vacina_dataAplicacao) %>% #ordem crescente de acordo com a data
+  tail(1) %>% # ultima observaçao
+  select(paciente_idade, vacina_dataAplicacao) %>% #selecionar as colunas de interesse para facilitar a visualizaçao
+  kable(col.name= c("Idade do paciente", "Data"),format = "pipe", align="c", row.names = F)
+```
+
+
+
+
+
+## Idade dos pacientes
+
+Continunado na análise exploratória, é válido checar como está a distribuição das idades dos pacientes. Denominaremos grupos de atenção aqueles indivíduos menores de idades e pacientes com mais 115 anos ou mais, vamos checar: 
+
+
+ \ 
+ 
+ 
+```{r echo=FALSE}
+## Visao geral
+
+summary(df$paciente_idade) 
+
+```
+
+
+
+
+```{r echo=FALSE}
+# pacientes menores de idade
+df %>%
+  filter(paciente_idade < 18 ) %>%
+  count(" Menores de 18 anos", name= "Número de pacientes") %>%
+  kable(col.names = c("Idade", "Número de pacientes"), format = "pipe", align="c", row.names = F)
+
+```
+
+
+
+
+```{r echo=FALSE}
+# pacientes com 115 anos ou mais
+
+df %>%
+  filter(paciente_idade >= 115 ) %>%
+  count("Pacientes com 115 ou mais anos")%>%
+  kable(col.names = c("Idade", "Número de pacientes"), format = "pipe", align = "c", row.names = F)
+```
+
+\ 
+
+O resultado das medidas acima mostra que há um número não desprezível de pessoas pertecentes aos grupos de atenção. Também vemos que a distribuição da idade dos pacientes é left skewed, isto é, possui maior densidade em idades maiores.  Vamos plotar um histograma para verificar.
+
+\ 
+
+```{r echo=FALSE, fig.height=8, fig.width=15}
+df %>%
+  ggplot(aes(x=paciente_idade))+
+  geom_histogram(bins=30, colour= "black",fill="orange")+
+  theme_clean()+
+    labs(x='Idade', y='Número de doses',
+       title= "Vacinação contra Covid-19 - Acre",
+       subtitle = "",
+       caption='Fonte: DATASUS')
+```
+
+\ 
+
+
+## Desagregando o "grupo de atenção"
+
+
+```{r echo=FALSE}
+df %>%
+  filter(paciente_idade >= 115  | paciente_idade <18) %>%
+  group_by(paciente_idade) %>% 
+  count() %>%
+  arrange(desc(n)) %>%
+  kable(col.name= c("Idade do paciente", "Doses"),format="pipe", align="c")
+```
+
+\ 
+
+De fato, como podemos ver, há indícios de erros na coleta dos dados, nao excluirei da amostra, mas cabe uma nota de atenção.
+
+\ 
+
+
+
+
+
+
+# Agregados da aplicação da vacina contra a COVID-19
+
+
+
+Após análise da estrutura dos dados partimos para verificar o montante de vacinas aplicadas nos últimos 15 dias.
+
+
+
+
+
+```{r include=FALSE}
+## definição do numero de dias que queremos analisar
+n_d <-15
+```
+
+
+\ 
+
+
+
+
+```{r echo=FALSE}
+## número de doses nos ultimos 15 dias
+ total <- df %>%
+  count("Total")
+
+total %>%
+  kable(col.name= c("Período", "Nº de doses"),format = "pipe", align = "c")
+```
+
+
+```{r echo=FALSE}
+## número de doses nos ultimos 15 dias
+ total_15 <- df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  count("Últimos 15 dias")
+
+total_15 %>%
+  kable(col.name= c("Período", "Nº de doses"),format = "pipe", align = "c")
+```
+
+
+\ 
+
+```{r echo=FALSE}
+# total de doses nos ultimos 15 dias
+total_dia <- df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  group_by(vacina_dataAplicacao) %>%
+  count() %>%
+  arrange(desc(vacina_dataAplicacao)) 
+
+total_dia %>%
+  kable(col.names = c("Data", "Nº de doses"), format= "pipe", align="c")
+
+
+```
+
+\ 
+
+\ 
+
+```{r echo=FALSE, fig.height=8, fig.width=15}
+total_dia %>% 
+ggplot()+
+  geom_col(aes(x=vacina_dataAplicacao, y= n),fill= "orange", colour="black") +
+  geom_label(aes(x= vacina_dataAplicacao, y=n, label=n))+
+  theme_clean() +
+  theme(axis.text.x = element_text(angle=90), legend.background = element_blank(), legend.title = element_blank())+
+  scale_x_date(labels = date_format("%d/%m"), date_breaks = "1 day") +
+  coord_cartesian(xlim = c((today() - ddays(n_d)), today()- ddays()))+
+  
+  labs(x='', y='Número de doses',
+       title= "Vacinação - Acre",
+       subtitle = "Últimos 15 dias",
+       caption='Fonte: DATASUS')
+
+
+  
+```
+
+\ 
+
+\ 
+
+## Vacinas aplicadas por dia dividida pelo tipo de dose, últimos 15 dias
+
+
+\ 
+
+
+```{r echo=FALSE}
+# numero total de doses por tipo de dose
+total_tipo <- df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  group_by(vacina_descricao_dose) %>%
+  count() 
+  
+  
+  total_tipo %>% kable(col.names = c("Dose", "Quantidade"), format="pipe", align = "c")
+
+```
+
+
+
+
+```{r echo=FALSE}
+# numero de doses por dia por tipo de dose (1a., 2a., ou unica)
+
+
+doses_tipo_dia <- df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  group_by(vacina_descricao_dose, vacina_dataAplicacao) %>%
+  count() %>%
+  arrange(desc(vacina_dataAplicacao)) 
+
+doses_tipo_dia %>%
+  kable(col.names = c("Dose","Data", "Quantidade"), format="pipe", align = "c")
+```
+
+```{r echo=FALSE, fig.height=8, fig.width=15}
+doses_tipo_dia %>%
+  ggplot()+
+  geom_col(aes(x=vacina_dataAplicacao, y=n, fill=vacina_descricao_dose), colour="black") +
+  theme_clean() +
+  theme(axis.text.x = element_text(angle=0), 
+        legend.background = element_blank(), 
+        legend.title = element_blank(),
+        legend.position = 'bottom')+
+  scale_x_date(labels = date_format("%d/%m"), date_breaks = "1 day") +
+  scale_fill_manual(values = c("grey", "orange"))+
+  coord_cartesian(xlim = c((today() - ddays(n_d)), today()- ddays(3)))+
+  
+  labs(x='', y='Número de doses',
+       title= "Vacinação - Acre",
+       subtitle = "Últimos 15 dias",
+       caption='Fonte: DATASUS')
+  
+  
+```
+
+
+
+```{r eval=FALSE, fig.width=15, include=FALSE}
+total_tipo%>%
+  ggplot()+
+  geom_col(aes(x= vacina_descricao_dose, y=n, fill= vacina_descricao_dose)) +
+  #geom_label(aes(x=vacina_descricao_dose, y= n, label=n))+
+  coord_flip()+
+  theme_clean() +
+  theme(legend.position = 'none',
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle=0),
+        legend.background = element_blank()) +
+  scale_fill_manual(values = c("orange", "grey"))+
+  labs(x='', y='Número de doses',
+       title= "Vacinação - Acre",
+       subtitle = "Últimos 15 dias",
+       caption='Fonte: DATASUS')
+  
+```
+
+\ 
+
+\ 
+
+
+
+## Vacinas aplicadas por fabricante, últimos 15 dias 
+
+
+
+
+```{r echo=FALSE}
+# numero de doses nos ultimos 15 dias por fabricante
+dose_fab <- df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  group_by(vacina_nome) %>%
+  count() %>%
+  arrange(desc(n))
+
+dose_fab %>%
+  kable(col.name=c("Vacina", "Nº de doses"),format = "pipe", align = "c")
+```
+
+\ 
+\ 
+
+
+## Número de doses  por fabricante e pelo tipo de dose, últimos 15 dias
+
+
+```{r echo=FALSE}
+# numero de doses nos ultimos 15 dias por fabricante e pelo tipo de dose
+dose_fab_tipo <-  df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  group_by(vacina_nome, vacina_descricao_dose) %>%
+  count() %>%
+  arrange(desc(n)) 
+
+dose_fab_tipo%>%
+  kable(col.name = c("Vacina", "Dose", "Quantidade"),format = "pipe", align = "c")
+```
+
+
+\ 
+
+
+```{r echo=FALSE, fig.height=5, fig.width=15}
+df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  group_by(vacina_nome, vacina_descricao_dose) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  
+  ggplot() +
+  geom_col(aes(x=vacina_nome , y=n, fill= vacina_descricao_dose)) +
+   scale_fill_manual(values = c("grey", "orange")) +
+  coord_flip()+
+  theme_clean()+
+  theme(legend.position = 'top',
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle=0),
+        legend.background = element_blank()) +
+  scale_fill_manual(values = c("orange", "grey"))+
+  labs(x='', y='Número de doses',
+       title= "Vacinação - Acre",
+       subtitle = "Últimos 15 dias",
+       caption='Fonte: DATASUS')
+  
+```
+\ 
+
+
+
+## Vacinas aplicadaspor grupos de atendimento com maior número de doses, últimos 15 dias
+
+
+```{r echo=FALSE}
+# numero de doses nos ultimos 15 dias no top 5 grupos 
+grupos_top5 <- df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  group_by(vacina_grupoAtendimento_nome) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(15)
+
+grupos_top5 %>%
+  kable(col.name=c("Grupos de atendimento", "Nº de doses"),format = "pipe", align = "c")
+```
+
+
+
+
+
+## Número de doses  por grupo de atendimento e tipo de dose, nos últimos 15 dias
+
+```{r echo=FALSE}
+# numero de doses nos ultimos 15 dias no top 5 grupos 
+grupos_top10_dose <- df %>%
+  filter(vacina_dataAplicacao > today() - ddays(n_d)) %>%
+  group_by(vacina_grupoAtendimento_nome, vacina_descricao_dose) %>%
+  count() %>%
+  arrange(desc(n)) %>%
+  head(15) 
+
+grupos_top10_dose %>%
+  kable(col.name=c("Grupos de atendimento", "Dose","Quantidade"),format = "pipe", align = "c")
+```
+
+
+```{r echo=FALSE, fig.height=15, fig.width=20}
+
+# Transformando os grupos de atendiemnto em factor para poder reodernar num plot futuro
+
+grupos_top10_dose$vacina_grupoAtendimento_nome <- factor(grupos_top10_dose$vacina_grupoAtendimento_nome, levels = unique(grupos_top10_dose$vacina_grupoAtendimento_nome))
+
+
+
+## plot 
+grupos_top10_dose %>%
+  mutate(grupos = fct_reorder(vacina_grupoAtendimento_nome, -n))%>% # ordenar em ordem crescente os grupos pelo valor de n
+  ggplot() +
+  geom_col(aes(x= grupos, y=n, fill= vacina_descricao_dose))+
+  scale_fill_manual(values = c("grey", "orange")) +
+  coord_flip()+
+  theme_clean()+
+  theme(legend.position = 'top',
+        legend.title = element_blank(),
+        axis.text.x = element_text(angle=0),
+        legend.background = element_blank()) +
+  scale_fill_manual(values = c("grey", "orange"))+
+  labs(x='', y='Número de doses',
+       title= "Vacinação - Acre",
+       subtitle = "Últimos 15 dias",
+       caption='Fonte: DATASUS')
+```
+
+
+# Análise adicional 
+
+
+
+## Sexo e raça dos pacientes
+
+Vamos ver como se apresentam duas importantes variáveis qualitativas dos pacientes -- sexo e raça
+
+
+
+\ 
+
+
+```{r echo=FALSE}
+df %>%
+  group_by(paciente_enumSexoBiologico)%>% #agrupando as observacoes pelo sexo 
+  summarise(mediana = median(paciente_idade),
+            n_doses = n()) %>%
+  mutate(percentual = round(n_doses / nrow(df)*100,2)) %>%
+  arrange(desc(n_doses)) %>% # ordenando em ordem decrescente
+  kable(col.names = c("Sexo", "Mediana", "Nº de doses","Percentual"), format="pipe", align = "c") # output num formato mais agradável
+```
+
+
+
+\ 
+
+
+```{r echo=FALSE}
+df %>%
+  group_by( paciente_racaCor_valor)%>% #agrupando as variaveis pela raça
+  summarise(mediana = median(paciente_idade),
+            n_doses = n()) %>%
+  arrange(desc(n_doses)) %>%   # ordenando em ordem decrescente
+  mutate(percentual = round(n_doses / nrow(df)*100,2))%>%
+
+  kable(col.names = c( "Raça", "Mediana", "Nº de doses","Percentual"), format = "pipe", align = "c") # output num formato mais agradável
+```
+
+\ 
+
+
+
+```{r echo=FALSE}
+df %>%
+  group_by(paciente_enumSexoBiologico, paciente_racaCor_valor)%>% #agrupando as variaveis pelo sexo e raça
+  summarise(mediana = median(paciente_idade),
+            n_doses = n()) %>%
+  mutate(percentual = round(n_doses / nrow(df)*100,2))%>%
+  arrange(desc(n_doses)) %>% # ordenando em ordem decrescente
+  kable(col.names = c("Sexo", "Raça", "Mediana", "Nº de doses", "Percentual"), format = "pipe", align="c") # output num formato mais agradável
+```
+
+
+## Exportando o Excel
+
+Por fim vamos utilizar as tabelas feitas acima para exportar para um arquivo .xlsx
+
+
+\ 
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+
+# total sem desagregar
+
+data.frame(Doses = c( "Total"),
+                 Número = total$n) %>%
+  write.xlsx("covid_ac.xlsx", sheetName="Total", row.names = F )
+
+# tipo de dose
+data.frame(Dose = c("1ª ", "2ª"),
+                 Número = total_tipo$n) %>%
+  write.xlsx("covid_ac.xlsx", sheetName="Total - tipo de dose", row.names = F, append = T)
+
+
+# total ultimos 15 dias
+data.frame(Doses = c("Total"),
+                 Número = total_15$n) %>%
+  write.xlsx("covid_ac.xlsx", sheetName="Total - 15 dias", row.names = F, append = T)
+
+# doses por dia
+
+data.frame(Data = total_dia$vacina_dataAplicacao,
+                 Número = total_dia$n) %>%
+  write.xlsx("covid_ac.xlsx", sheetName="Doses por dia - 15 dias", row.names = F, append = T)
+
+## Total por fabricante
+data.frame(fabricante = dose_fab$vacina_nome,
+                 Número = dose_fab$n) %>%
+  write.xlsx("covid_ac.xlsx", sheetName="Total - fabricante - 15 dias", row.names = F, append = T)
+
+## Total por fabricante e dose
+data.frame(fabricante = dose_fab_tipo$vacina_nome,
+           Dose =dose_fab_tipo$vacina_descricao_dose,
+                 Número = dose_fab_tipo$n) %>%
+  write.xlsx("covid_ac.xlsx", sheetName="Total - fabricante e tipo de sose - 15 dias", row.names = F, append = T)
+
+
+## total por grupo
+
+data.frame(Grupo = grupos_top5$vacina_grupoAtendimento_nome,
+                 Número = grupos_top5$n) %>%
+  write.xlsx("covid_ac.xlsx", sheetName="Total - grupos - 15 dias", row.names = F, append = T)
+
+# total por grupo e dose
+
+data.frame(Grupo = grupos_top10_dose$vacina_grupoAtendimento_nome,
+           Dose = grupos_top10_dose$vacina_descricao_dose,
+                 Número = grupos_top10_dose$n) %>%
+  write.xlsx("covid_ac.xlsx", sheetName="Total - grupos e tipo de dose - 15 dias", row.names = F, append = T)
+
+```
+
