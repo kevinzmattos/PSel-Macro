@@ -1,8 +1,14 @@
 
-Exercício
+#### Exercício
+
 Baixar os dados dos Registros de Vacinação de Covid19 para o estado do Acre.
+
 Estão disponíveis em: https://opendatasus.saude.gov.br/dataset/covid-19-vacinacao/resource/ef3bd0b8-b605-474b-9ae5-c97390c197a8
+
 Dicionário dos dados: https://opendatasus.saude.gov.br/dataset/b772ee55-07cd-44d8-958f-b12edd004e0b/resource/38ead83d-b115-4219-852e-7244792bc311/download/dicionario-de-dados-vacinacao.pdf
+
 Extrair os agregados do número de doses de vacinas aplicadas por dia, dividindo pela vacina utilizada e a dose (1ª ou 2ª dose).
+
 Montar gráficos com que julgar interessantes para compreender melhor os dados.
+
 Exportar os agregados para o excel.
