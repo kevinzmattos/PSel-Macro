@@ -1,0 +1,351 @@
+---
+title: "Relatório WHG"
+author: "Kevin Zavala Mattos"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+## Bilbitecas
+library(tidyverse) # manipulação 
+library(ggthemes) # temas diferentes
+library(scales) # eixo com datas
+library(lubridate) # operações com datas
+library(zoo) #media movel
+library(kableExtra) #tabela
+```
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+### A função faz uma tabela com os dados dos últimos dias #####
+
+get_infos <- function(info, country){
+  
+  links = list(casos = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv",
+               obitos = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv" ) # links dos csvs
+  
+  tabela_raw = read_csv(links[[info]])  %>%
+    filter(`Country/Region` == country) %>% # filtra para o país escolhido no parâmetro 'country'
+    select( -c(`Province/State`,Lat,Long)) # retira as colunas que não queremos
+  
+# Deixando no formato tidy
+
+tabela_long = tabela_raw %>%
+  pivot_longer(cols = -`Country/Region`,
+               names_to = "data",
+               values_to = "valor") %>% # o pivot_longer deixa a tabela no formato tidy, isto é, colunas = variáveis, linhas = observações
+  mutate(new = c(0,diff(valor)), # código que cria a variavel de novos casos, pegando a linha e subtraindo a anterior, é um vetor que começa com zero, pois a primeira obs não tem uma obs anterior, assim o zero entra como substituto
+         mm = rollmean(new,k=7, fill = NA, align = "right")) # média móvel, k = dias, fill= preenche valores vazios,  align = corresponde ao alinhamento da média, ao escolher 'rgiht' a média móvel  contabiliza o ponto + k-1 pontos anteriores
+
+tabela_long$data <- parse_date(tabela_long$data, format = "%m/%d/%y") # transforma em data para operações com filtro
+
+
+# total dos  ultimos 15 dias
+ dados <- tabela_long %>%
+  filter( data >= tail(tabela_long$data,1) - days(15)) %>%
+   select(data,new,mm)
+ 
+ 
+ if(info == "casos"){
+   dados %>%
+      mutate_if(is.numeric, format, digits=2) %>% # arrendonda os números
+   kable(col.names = c("Data", "Número de casos","Média móvel"), align="c", format = "pipe")
+ }
+
+ else{
+   dados %>%
+      mutate_if(is.numeric, format, digits=2) %>%
+   kable(col.names = c("Data", "Número de óbitos","Média móvel"), align="c", format = "pipe")
+   }
+}
+
+```
+
+
+
+```{r message=TRUE, warning=FALSE, include=FALSE}
+
+### A função permite escolher o país, a informação - obitos ou novos casos - assim como o período, em meses de análise #####
+
+fazer_grafico <- function(info, country, period = 15){
+  
+  links = list(casos = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv",
+               obitos = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv" ) # links dos csvs
+  
+  tabela_raw = read_csv(links[[info]])  %>%
+    filter(`Country/Region` == country) %>% # filtra para o país escolhido no parâmetro 'country'
+    select( -c(`Province/State`,Lat,Long)) # retira as colunas que não queremos
+  
+# Deixando no formato tidy
+
+tabela_long = tabela_raw %>%
+  pivot_longer(cols = -`Country/Region`,
+               names_to = "data",
+               values_to = "valor") %>% # o pivot_longer deixa a tabela no formato tidy, isto é, colunas = variáveis, linhas = observações
+  mutate(new = c(0,diff(valor)), # código que cria a variavel de novos casos, pegando a linha e subtraindo a anterior, é um vetor que começa com zero, pois a primeira obs não tem uma obs anterior, assim o zero entra como substituto
+         mm = rollmean(new,k=7, fill = NA, align = "right")) # média móvel, k = dias, fill= preenche valores vazios,  align = corresponde ao alinhamento da média, ao escolher 'rgiht' a média móvel  contabiliza o ponto + k-1 pontos anteriores
+
+tabela_long$data <- parse_date(tabela_long$data, format = "%m/%d/%y") # transforma em data para operações com filtro
+
+
+
+### GRÁFICO####
+
+periodo <- tail(tabela_long$data,1) - months(period) # aqui é onde o período é calculado, pega a ultima obs e subtrai 
+
+grafico = tabela_long %>%
+    filter(data >= periodo) %>% # filtro de data
+  ggplot(aes(x= data, y = new))+
+  geom_col(fill= "#19a4d8")+ 
+  geom_line(aes(x=data,y=mm), color="red", size=1)+
+  theme_clean()+
+  scale_x_date(labels = date_format("%b/%y"), date_breaks = "2 month") + # deixando o eixo x formatado no estilo de data
+  theme(axis.text.x = element_text(angle=0), legend.position = 'top', legend.background = element_blank(),
+        plot.background = element_blank())+ #parâmetros relacionados ao design do plot
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                            decimal.mark = ",")) # muda o eixo y
+
+
+
+### codigo para escolher quais serão os títulos ###
+
+if(info == "casos"){ 
+  graf_1 = grafico + 
+    labs(x='',y='', 
+       title='Novos casos diários de COVID-19',
+       subtitle = "Média móvel de 7 dias",
+       caption='Fonte: Johns Hopkins University. Elaboração: Kevin Mattos')
+  return(graf_1)
+
+
+  } else{
+    graf_2  = grafico +
+      labs(x='',y='', 
+       title='Óbitos diários por COVID-19',
+       subtitle = "Média móvel de 7 dias",
+       caption='Fonte: Johns Hopkins University. Elaboração: Kevin Mattos')
+    return(graf_2)
+    }
+}
+
+```
+
+
+
+
+# 1 – Número de novos casos diários de Covid-19 no Brasil 
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+get_infos("casos", "Brazil")
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+fazer_grafico("casos", "Brazil")
+```
+
+
+# 2 – Número de novos óbitos diários de Covid-19 no Brasil + média móvel de 7 dias
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+get_infos("obitos", "Brazil")
+```
+
+
+
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+fazer_grafico("obitos", "Brazil")
+```
+
+
+
+
+# 3 – Número de doses de vacina para Covid-19 aplicadas diariamente no Brasil + média móvel de 7 dias, de acordo com o Ministério da Saúde
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dados_min_sau_raw <- read_csv("https://covid.ourworldindata.org/data/owid-covid-data.csv?v=2021-06-02") # link
+glimpse(dados_min_sau_raw) # visçao geral da data frame
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dados_min_sau_clean <- dados_min_sau_raw %>%
+  filter(location == "Brazil") %>% 
+  select(location, date,new_vaccinations, new_vaccinations_smoothed) %>% # escolhi os dados normais e suavizados para poder testar
+  mutate(mm_n_smooth = rollmean(new_vaccinations, k =7, fill = NA, align ="right"), 
+         mm_smooth = rollmean(new_vaccinations_smoothed, k =7, fill = NA, align ="right"))
+
+```
+
+
+```{r echo=FALSE}
+dados_min_sau_clean %>%
+  select(date, new_vaccinations_smoothed, mm_smooth) %>%
+  filter( date > tail(dados_min_sau_clean$date,1) - days(15)) %>%
+   mutate_if(is.numeric, format, digits=2) %>%
+  
+   kable(col.names = c("Data", "Número de doses","Média móvel"), align="c", format = "pipe")
+```
+
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## gráfico
+periodo <- tail(dados_min_sau_clean$date,1) - days(120)
+dados_min_sau_clean %>%
+  filter(date > periodo) %>%
+  ggplot(aes(x=date, y=new_vaccinations_smoothed))+
+  geom_col(fill= "#19a4d8")+
+  geom_line(aes(y=mm_smooth), color="red", size=1)+
+  theme_clean()+
+  scale_x_date(labels = date_format("%d/%b"), date_breaks = "10 days")+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                            decimal.mark = ","),
+                      breaks = c(0,200000,400000,600000,800000,1000000,1200000,1400000))+
+  theme(axis.text.x = element_text(angle=0),
+        legend.background = element_blank(),
+        plot.background = element_blank())+
+  labs(x='',y='', 
+       title='Número de doses de vacina para COVID-19',
+       subtitle = "Média móvel de 7 dias",
+       caption='Fonte: Ministério da Saúde. Elaboração: Kevin Mattos')
+```
+
+
+# 4- Número de doses de vacina para Covid-19 aplicadas diariamente no Brasil + média móvel de 7 dias, de acordo com os dados das Secretarias Estaduais
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dados_estaduais <- read.csv("https://raw.githubusercontent.com/wcota/covid19br/master/cases-brazil-states.csv", encoding = "UTF-8", na.strings = "") # o csv estava um pouco desconfigurado, por isso a utilização do 'enconding' e 'na.strings'
+glimpse(dados_estaduais)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+dados_estaduais_clean <- dados_estaduais %>%
+  select(date,country,state,vaccinated,vaccinated_second) %>%
+filter(state == "TOTAL") %>% # selecionando apenas os casos agregados
+  mutate(new_first= c(0,diff(vaccinated)), # calculando o numero de novas primeiras doses
+         new_second = c(0,diff(vaccinated_second)),  # calculando o novas segundas doses
+         new_total = new_first + new_second,  # calculando o numero total de novas doses
+         media_movel = rollmean(new_total,k=7,fill = NA, align = "right")) 
+
+dados_estaduais_clean$date <- as_date(dados_estaduais_clean$date)
+```
+
+
+
+```{r echo=FALSE}
+
+# infos gerais dos ultimos 15 dias 
+dados_estaduais_clean %>%
+  select(-c(country,state,vaccinated, vaccinated_second)) %>%
+  filter( date > tail(dados_min_sau_clean$date,1) - days(15)) %>%
+   mutate_if(is.numeric, format, digits=2) %>%
+  kable(col.names = c("Data", "Número de 1a. doses","Número de 2a. doses", "Número total de doses", "Média móvel do total"), align="c", format = "pipe")
+
+```
+
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+periodo <- tail(dados_estaduais_clean$date,1) - months(4)
+
+dados_estaduais_clean %>%
+  filter(date >= periodo) %>%
+  ggplot(aes(x=date,y=new_total))+
+    geom_col(fill= "#19a4d8")+
+  geom_line(aes(y=media_movel), color="red", size=1)+
+  theme_clean()+
+  scale_y_continuous(labels = comma_format(big.mark = ".",
+                                            decimal.mark = ","),
+                      breaks = c(0,250000,500000,750000,1000000,1250000,1500000,1750000))+
+  theme(axis.text.x = element_text(angle=0),
+        legend.background = element_blank(),
+        plot.background = element_blank())+
+   scale_x_date(labels = date_format("%d/%b"), date_breaks = "10 days")+
+  labs(x='',y='', 
+       title='Número de doses de vacina para Covid-19 aplicadas diariamente',
+       subtitle = "Média móvel de 7 dias",
+       caption='Fonte: Secretarias estaduais. Elaboração: Kevin Mattos')
+
+```
+
+
+# 5 – Indicador de Mobilidade do Google para o Brasil – média simples entre os componentes de retail, grocery e workplace + média móvel de 7 dias desse mesmo agregado
+
+
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+mob_raw <- read_csv("https://www.gstatic.com/covid19/mobility/Global_Mobility_Report.csv") 
+glimpse(mob_raw)
+```
+
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+mob_clean <- mob_raw %>%
+  filter(country_region == "Brazil" & is.na(sub_region_1)) %>% # os is.na foi uma maneira de captar apenas os dados agregados do BR
+  select(-colnames(mob_raw)[1:8]) %>%
+  `colnames<-`(c("date","retail","grocery","parks","transit","workplaces","residential")) %>% #mudei o nome das colunas para ficar mais simples de referencia-las no código
+  mutate(indicador = (retail + grocery+workplaces)/3, # média simples dos indicadores
+         media_movel = rollmean(indicador,k=7,fill = NA, align = "right"))
+
+```
+
+
+
+
+
+
+```{r echo=FALSE}
+mob_clean %>%
+  select(date, retail,grocery, workplaces, indicador, media_movel) %>%
+  filter( date > tail(mob_clean$date,1) - days(15)) %>%
+  mutate_if(is.numeric, format, digits=2) %>% 
+  kable(col.names = c("Data", "Retail","Grocery", "Workplaces", "Indicador","Média móvel do indicador"), align="c", format = "pipe")
+  
+```
+
+
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+periodo <- tail(mob_clean$date,1) - months(16)
+mob_clean %>%
+  filter(date >= periodo) %>%
+  ggplot(aes(x=date, y= indicador))+
+  geom_col(fill= "#19a4d8")+
+  geom_line(aes(y=media_movel), color="red", size=1)+
+  theme_clean()+
+  scale_y_continuous(breaks = c(-60,-45,-30,-15,0,15))+
+  
+    theme(axis.text.x = element_text(angle=0),
+        legend.background = element_blank(),
+        plot.background = element_blank())+
+   scale_x_date(labels = date_format("%b/%y"), date_breaks = "60 days")+
+  labs(x='',y='', 
+       title='Indicador de mobilidade',
+       subtitle = "Média simples e móvel de 7 dias dos indicadores - grocery,retail e workplaces",
+       caption='Fonte: Google. Elaboração: Kevin Mattos')
+
+```
+
