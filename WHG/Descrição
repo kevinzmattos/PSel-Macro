@@ -1,1 +1,22 @@
 
+Elaborar um relatório de acompanhamento diário da evolução da pandemia no Brasil, que seja atualizado da forma mais automática possível e contenha os seguintes gráficos:
+
+1 – Número de novos casos diários de Covid-19 no Brasil + média móvel de 7 dias
+2 – Número de novos óbitos diários de Covid-19 no Brasil + média móvel de 7 dias
+3 – Número de doses de vacina para Covid-19 aplicadas diariamente no Brasil + média móvel de 7 dias, de acordo com o Ministério da Saúde
+4- Número de doses de vacina para Covid-19 aplicadas diariamente no Brasil + média móvel de 7 dias, de acordo com os dados das Secretarias Estaduais
+5 – Indicador de Mobilidade do Google para o Brasil – média simples entre os componentes de retail, grocery e workplace + média móvel de 7 dias desse mesmo agregado
+
+Fontes dos dados (você pode utilizar fontes alternativas para as mesmas informações, se achar melhor)
+
+Novos casos e óbitos de Covid-19
+https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv
+
+Vacinação para Covid-19 – dados do Ministério da Saúde
+https://covid.ourworldindata.org/data/owid-covid-data.csv?v=2021-06-02
+
+Vacinação para Covid-19 – dados das Secretarias Estaduais
+https://raw.githubusercontent.com/wcota/covid19br/master/cases-brazil-states.csv
+
+Indicador de Mobilidade do Google
+https://www.gstatic.com/covid19/mobility/Global_Mobility_Report.csv
